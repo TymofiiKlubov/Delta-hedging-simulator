@@ -75,7 +75,7 @@
       "detail": "best band band 0.05 (edge): J = 126.3 vs 161.9 for every 6h (22% lower)"
     }
   ],
-  "seconds": 48.63,
+  "seconds": 50.47,
   "config": {
     "market": {
       "spot": 60000.0,

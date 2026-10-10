@@ -11,6 +11,12 @@
       "merton": "Merton(sigma=0.4847679857416329, lam=5.0, jump_mean=-0.05, jump_std=0.15)",
       "heston": "Heston(v0=0.36, kappa=3.0, theta=0.36, xi=1.5, rho=-0.3)"
     },
+    "model_prices": {
+      "gbm": 4112.364430952122,
+      "merton": 3959.3578826671746,
+      "heston": 4022.663607480663
+    },
+    "black_scholes_price": 4112.364430952122,
     "show_steps": 720,
     "show_interval": "1h"
   },
@@ -24,6 +30,11 @@
       "name": "GBM: std vs Derman-Kamal (N >= 30)",
       "ok": true,
       "detail": "sim/theory within 2.7%"
+    },
+    {
+      "name": "mean P&L = BS(sigma_i) - model price, every model and frequency",
+      "ok": true,
+      "detail": "largest |z| = 1.74 (GBM, N=2880); threshold 3.40; theory means GBM +0.0, Merton jumps +153.0, Heston stochastic vol +89.7"
     },
     {
       "name": "Merton jumps: risk plateaus as hedging gets finer",
@@ -46,7 +57,7 @@
       "detail": "1% expected shortfall -2,928 vs GBM -443; excess kurtosis 2.0 vs 1.7"
     }
   ],
-  "seconds": 17.46,
+  "seconds": 16.1,
   "config": {
     "market": {
       "spot": 60000.0,
