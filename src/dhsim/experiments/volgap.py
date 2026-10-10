@@ -13,8 +13,6 @@ The same Brownian increments are reused for every sigma_r (common random numbers
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
 from .. import bs
@@ -244,7 +242,6 @@ def _plot_distributions(setup: Setup, samples: dict, show: list[float]):
 
 
 def _print(setup: Setup, result: ExperimentResult, n_paths: int) -> None:
-    n = result.summary["steps"]
     print(f"\n=== Experiment 2: realised vs implied vol ({n_paths:,} paths, "
           f"{result.summary['interval']} hedging, {result.seconds:.1f}s) ===")
     print(setup.describe())

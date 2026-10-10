@@ -8,8 +8,6 @@ than the implied vol priced in, weighted by the gamma held at the time.
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 
 from .. import plotting as plt_
