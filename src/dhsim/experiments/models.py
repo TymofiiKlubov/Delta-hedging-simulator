@@ -9,14 +9,20 @@ Black-Scholes delta at sigma_i on the same schedules:
 * Heston: realised variance itself is random, so the vol-gap P&L
   (1/2) int Gamma S^2 (sigma_i^2 - v_t) dt does not average out with more rebalancing.
 
-Hedging more often removes the GBM part of the risk and leaves a fat-tailed residual.
+Hedging more often removes the GBM part of the risk and leaves a fat-tailed residual. On
+risk-neutral paths the short's mean P&L is exactly BS(sigma_i) minus the option's fair value in
+the model (Merton series, Heston Fourier inversion): fat tails make the ATM option cheaper than
+Black-Scholes at the same variance, so the short is paid for carrying the tail.
 """
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
+from .. import bs
 from .. import plotting as plt_
 from .. import theory as th
 from ..config import Config
@@ -24,7 +30,7 @@ from ..hedging import Strategy, run_hedge
 from ..paths import GBM, Heston, Merton
 from ..stats import summarize
 from .common import (Checks, ExperimentResult, Setup, Timer, common_grid, print_table,
-                     simulate_chunks, write_outputs)
+                     simulate_chunks, write_outputs, z_threshold)
 
 LABELS = {"gbm": "GBM", "merton": "Merton jumps", "heston": "Heston stochastic vol"}
 
@@ -37,6 +43,18 @@ def build_models(cfg: Config, sigma: float) -> dict:
         "merton": Merton.matched(sigma, m.lam, m.jump_mean, m.jump_std),
         "heston": Heston(var if h.v0 is None else h.v0, h.kappa, var if h.theta is None else h.theta,
                          h.xi, h.rho),
+    }
+
+
+def model_prices(setup: Setup, models: dict) -> dict[str, float]:
+    """Fair value of the option under each model (closed form or Fourier inversion)."""
+    S0, K, T, r, q, kind = (setup.S0, setup.K, setup.T, setup.market.r, setup.market.q,
+                            setup.option.kind)
+    m, h = models["merton"], models["heston"]
+    return {
+        "gbm": float(bs.price(S0, K, T, models["gbm"].sigma, r, q, kind)),
+        "merton": th.merton_price(S0, K, T, m.sigma, m.lam, m.jump_mean, m.jump_std, r, q, kind),
+        "heston": th.heston_price(S0, K, T, h.v0, h.kappa, h.theta, h.xi, h.rho, r, q, kind),
     }
 
 
@@ -59,17 +77,26 @@ def run(cfg: Config, out_dir=None, verbose: bool = True) -> ExperimentResult:
                                             setup.sigma_i, Strategy(), setup.costs).pnl)
             pnl[name] = {n: np.concatenate(v) for n, v in acc.items()}
 
+    prices = model_prices(setup, models)
+    sold = abs(setup.option.position) * float(
+        bs.price(setup.S0, setup.K, setup.T, setup.sigma_i, setup.market.r, setup.market.q,
+                 setup.option.kind))
+    growth = math.exp(setup.market.r * setup.T)
     rows = []
     for name in models:
+        theory_mean = np.sign(-setup.option.position) * (sold - abs(setup.option.position)
+                                                         * prices[name]) * growth
         for n in steps:
             s = summarize(pnl[name][n])
             rows.append({"model": name, "rebalances": n, "interval": setup.interval(n),
-                         "mean": s["mean"], "se_mean": s["se_mean"], "std": s["std"],
+                         "mean": s["mean"], "se_mean": s["se_mean"], "theory_mean": theory_mean,
+                         "std": s["std"],
                          "se_std": s["se_std"], "skew": s["skew"],
                          "excess_kurtosis": s["excess_kurtosis"], "q01": s["q01"],
                          "es01": s["es01"], "q99": s["q99"]})
     checks, summary = _check(setup, rows, steps, show)
-    summary.update(models={k: repr(v) for k, v in models.items()}, show_steps=show,
+    summary.update(models={k: repr(v) for k, v in models.items()}, model_prices=prices,
+                   black_scholes_price=sold / abs(setup.option.position), show_steps=show,
                    show_interval=setup.interval(show))
     fig = _plot(setup, rows, pnl, steps, show)
     result = ExperimentResult("models", rows, summary, checks, {"models": fig}, seconds=timer.seconds)
@@ -93,6 +120,15 @@ def _check(setup: Setup, rows: list[dict], steps: list[int], show: int) -> tuple
         worst = max(dk, key=lambda x: abs(x - 1))
         checks.add("GBM: std vs Derman-Kamal (N >= 30)", abs(worst - 1) < 0.05,
                    f"sim/theory within {abs(worst - 1):.1%}")
+    if setup.risk_neutral_drift and setup.costs.is_zero:
+        z = z_threshold(len(rows))
+        worst = max(rows, key=lambda r: abs(r["mean"] - r["theory_mean"]) / r["se_mean"])
+        zmax = abs(worst["mean"] - worst["theory_mean"]) / worst["se_mean"]
+        checks.add("mean P&L = BS(sigma_i) - model price, every model and frequency", zmax < z,
+                   f"largest |z| = {zmax:.2f} ({LABELS[worst['model']]}, N={worst['rebalances']}); "
+                   f"threshold {z:.2f}; theory means " + ", ".join(
+                       f"{LABELS[m]} {next(r['theory_mean'] for r in rows if r['model'] == m):+,.1f}"
+                       for m in ("gbm", "merton", "heston")))
     summary: dict = {"plateau": {}}
     if len(steps) >= 2:
         hi, prev = steps[-1], steps[-2]
@@ -150,9 +186,10 @@ def _plot(setup: Setup, rows: list[dict], pnl: dict, steps: list[int], show: int
         for m, (color, _) in styles.items():
             x = data[m]
             s = summarize(x)
+            theory = next(r["theory_mean"] for r in rows if r["model"] == m)
             ax2.hist(x, bins=bins, density=True, histtype="step", color=color, lw=1.5,
-                     label=f"{LABELS[m]}: std {plt_.compact(s['std'])}, "
-                           f"1% ES {plt_.compact(s['es01'])}")
+                     label=f"{LABELS[m]}: mean {s['mean']:+,.0f} (theory {theory:+,.0f}), "
+                           f"std {plt_.compact(s['std'])}, 1% ES {plt_.compact(s['es01'])}")
         ax2.set_yscale("log")
         ax2.yaxis.set_major_formatter(FuncFormatter(lambda *_: ""))
         ax2.yaxis.set_minor_formatter(NullFormatter())
@@ -172,11 +209,12 @@ def _print(setup: Setup, result: ExperimentResult, n_paths: int) -> None:
           f"{result.seconds:.1f}s) ===")
     print(setup.describe())
     for k, v in result.summary["models"].items():
-        print(f"  {LABELS[k]}: {v}")
+        print(f"  {LABELS[k]}: {v}; option worth {result.summary['model_prices'][k]:,.2f} "
+              f"(sold at {result.summary['black_scholes_price']:,.2f})")
     print(print_table(result.rows, [
         ("model", "model", "s"), ("rebalances", "N", "d"), ("interval", "every", "s"),
-        ("mean", "mean", ",.1f"), ("se_mean", "se", ",.1f"), ("std", "std", ",.1f"),
-        ("skew", "skew", ".2f"), ("excess_kurtosis", "ex.kurt", ".1f"), ("q01", "q01", ",.0f"),
+        ("mean", "mean", ",.1f"), ("se_mean", "se", ",.1f"), ("theory_mean", "theory", ",.1f"),
+        ("std", "std", ",.1f"), ("skew", "skew", ".2f"), ("excess_kurtosis", "ex.kurt", ".1f"), ("q01", "q01", ",.0f"),
         ("es01", "ES1%", ",.0f"),
     ]))
     print(result.checks.report())

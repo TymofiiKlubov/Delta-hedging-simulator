@@ -234,6 +234,55 @@ def expected_hedge_cost(n_rebalances, S0, K, T, sigma_r, sigma_h=None, bps=0.0, 
     return out if np.ndim(n_rebalances) else out[0]
 
 
+def merton_price(S0, K, T, sigma, lam, jump_mean, jump_std, r=0.0, q=0.0, kind="call",
+                 n_terms: int = 100) -> float:
+    """Merton (1976) jump-diffusion price: a Poisson mixture of Black-Scholes prices.
+
+    Given n jumps the log-price is Gaussian with variance sigma^2 T + n jump_std^2 and the
+    compensated drift r - q - lam k + n ln(1 + k) / T, where k = E[J] - 1; the weights use the
+    jump-size-adjusted intensity lam (1 + k).
+    """
+    k = math.expm1(jump_mean + 0.5 * jump_std**2)
+    lam_t = lam * (1.0 + k) * T
+    total = 0.0
+    for n in range(n_terms):
+        weight = math.exp(-lam_t + (n * math.log(lam_t) if lam_t > 0 else 0.0) - math.lgamma(n + 1))
+        if lam_t == 0 and n > 0:
+            break
+        sig_n = math.sqrt(sigma**2 + n * jump_std**2 / T)
+        r_n = r - lam * k + n * math.log1p(k) / T
+        total += weight * float(bs.price(S0, K, T, sig_n, r_n, q, kind))
+    return total
+
+
+def heston_price(S0, K, T, v0, kappa, theta, xi, rho, r=0.0, q=0.0, kind="call") -> float:
+    """Heston (1993) price by Fourier inversion (Gil-Pelaez), using the numerically stable
+    form of the characteristic function from Albrecher et al. (2007)."""
+    from scipy.integrate import quad
+
+    x, log_k = math.log(S0), math.log(K)
+
+    def cf(u: complex) -> complex:
+        iu = 1j * u
+        beta = kappa - rho * xi * iu
+        d = np.sqrt(beta**2 + xi**2 * (iu + u**2))
+        g = (beta - d) / (beta + d)
+        e = np.exp(-d * T)
+        c = (r - q) * iu * T + kappa * theta / xi**2 * ((beta - d) * T - 2.0 * np.log((1 - g * e) / (1 - g)))
+        dv = (beta - d) / xi**2 * (1 - e) / (1 - g * e)
+        return np.exp(c + dv * v0 + iu * x)
+
+    forward_cf = cf(-1j)  # E[S_T] = S0 e^{(r - q) T}
+    p1 = 0.5 + quad(lambda u: (np.exp(-1j * u * log_k) * cf(u - 1j) / (1j * u * forward_cf)).real,
+                    0, np.inf, limit=400)[0] / math.pi
+    p2 = 0.5 + quad(lambda u: (np.exp(-1j * u * log_k) * cf(u) / (1j * u)).real,
+                    0, np.inf, limit=400)[0] / math.pi
+    call = S0 * math.exp(-q * T) * p1 - K * math.exp(-r * T) * p2
+    if bs.is_call(kind):
+        return call
+    return call - S0 * math.exp(-q * T) + K * math.exp(-r * T)
+
+
 @dataclass(frozen=True)
 class CostTradeoff:
     n_rebalances: np.ndarray

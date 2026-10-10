@@ -6,7 +6,7 @@ import pytest
 from dhsim import bs
 from dhsim import theory as th
 from dhsim.hedging import Costs, Market, Option, run_hedge
-from dhsim.paths import GBM
+from dhsim.paths import GBM, Heston, Merton
 from dhsim.stats import summarize
 
 S0, K, T = 60_000.0, 60_000.0, 30 / 365
@@ -108,6 +108,27 @@ def test_optimal_frequency_scales_like_cost_to_the_minus_two_thirds():
     assert n1 / n8 == pytest.approx(8 ** (2 / 3), rel=0.15)
     tradeoff = th.cost_tradeoff([1, n8, 100_000], S0, K, T, 0.6, 0.6, bps=8.0)
     assert tradeoff.objective[1] < tradeoff.objective[0] and tradeoff.objective[1] < tradeoff.objective[2]
+
+
+def test_merton_price_limits_and_monte_carlo():
+    assert th.merton_price(S0, K, T, 0.6, 0.0, -0.05, 0.15) == pytest.approx(float(bs.price(S0, K, T, 0.6)), rel=1e-12)
+    m = Merton.matched(0.6, lam=5.0, jump_mean=-0.05, jump_std=0.15)
+    for strike, r, q, kind in [(60_000.0, 0.0, 0.0, "call"), (54_000.0, 0.03, 0.01, "put")]:
+        p = m.simulate(S0, T, 20, 300_000, np.random.default_rng(6), mu=r - q)
+        disc = math.exp(-r * T) * bs.payoff(p.S[:, -1], strike, kind)
+        closed = th.merton_price(S0, strike, T, m.sigma, m.lam, m.jump_mean, m.jump_std, r, q, kind)
+        assert abs(disc.mean() - closed) < 4 * disc.std() / math.sqrt(disc.size)
+
+
+def test_heston_price_limits_and_monte_carlo():
+    # no vol of vol: Black-Scholes at sqrt(theta)
+    assert th.heston_price(S0, K, T, 0.36, 3.0, 0.36, 1e-4, 0.0) == pytest.approx(float(bs.price(S0, K, T, 0.6)), rel=1e-6)
+    h = Heston(v0=0.30, kappa=2.0, theta=0.40, xi=1.0, rho=-0.5)
+    p = h.simulate(S0, T, 400, 60_000, np.random.default_rng(7), mu=0.02)
+    for strike in (54_000.0, 60_000.0, 66_000.0):
+        disc = math.exp(-0.02 * T) * np.maximum(p.S[:, -1] - strike, 0.0)
+        closed = th.heston_price(S0, strike, T, h.v0, h.kappa, h.theta, h.xi, h.rho, r=0.02)
+        assert abs(disc.mean() - closed) < 4 * disc.std() / math.sqrt(disc.size)
 
 
 def test_cost_formula_counts_fixed_fees_per_trade():
