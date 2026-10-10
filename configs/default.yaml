@@ -1,0 +1,74 @@
+# Default configuration (mirrors the dataclass defaults in src/dhsim/config.py).
+# Copy this file, edit it and pass it with `python -m dhsim <command> --config my.yaml`.
+# Command-line flags override values from the file.
+
+market:
+  spot: 60000.0
+  r: 0.0          # interest rate on the cash account (continuous compounding)
+  q: 0.0          # dividend / funding yield earned by holding the underlying
+  mu: 0.0         # real-world drift of the spot price (excluding q)
+
+option:
+  kind: call      # call | put
+  strike: null    # null -> at the money (strike = spot)
+  expiry_days: 30.0
+  position: -1.0  # options held: -1 = short one option
+
+vol:
+  implied: 0.60   # sigma_i: sale price BS(sigma_i) and default hedge delta
+  realised: 0.60  # sigma_r: volatility of the simulated paths
+  hedge_with: implied   # implied | realised
+
+costs:            # applied in frequency / volgap / path / models
+  bps: 0.0        # proportional, basis points of traded notional
+  fixed: 0.0      # per trade, currency units
+
+simulation:
+  paths: 20000
+  seed: 42
+  days_per_year: 365.0      # calendar time: crypto trades 24/7
+  max_chunk_elements: 4000000
+
+output_dir: output
+
+frequency:
+  # Rebalances over the option's life (30 days): 1 = monthly, 4 ~ weekly, 30 = daily,
+  # 720 = hourly, 2880 = every 15 min, 8640 = every 5 min.
+  steps: [1, 2, 4, 8, 15, 30, 60, 120, 240, 480, 720, 1440, 2880, 8640]
+  paths: null     # null -> simulation.paths
+
+volgap:
+  sigma_r: [0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80]
+  steps: 720      # hourly hedging
+  paths: 10000
+  show: [0.45, 0.75]
+
+costs_tradeoff:
+  bps: 5.0
+  fixed: 0.0
+  risk_aversion: 1.0        # kappa in J = -E[PnL] + kappa * Var[PnL] / premium
+  steps: [1, 2, 4, 8, 15, 30, 60, 120, 240, 480, 960, 1440, 2880]
+  bands: [0.0025, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3]
+  band_modes: [target, edge]
+  monitor_steps: 2880       # band hedging checks the band every 15 minutes
+  paths: 10000
+
+path:
+  seed: 3
+  steps: 720      # hourly grid
+  every: 1        # rebalance every `every` grid steps
+
+models:
+  steps: [8, 30, 120, 720, 2880]
+  show_steps: 720
+  paths: 10000
+  merton:
+    lam: 5.0          # jumps per year
+    jump_mean: -0.05  # mean log jump
+    jump_std: 0.15    # std of log jump
+  heston:
+    kappa: 3.0
+    xi: 1.5
+    rho: -0.3
+    v0: null          # null -> implied vol squared
+    theta: null       # null -> implied vol squared
