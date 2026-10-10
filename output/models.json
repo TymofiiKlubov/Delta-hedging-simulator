@@ -1,0 +1,185 @@
+{
+  "experiment": "models",
+  "setup": "short 1 x 30-day call K=60,000 on S0=60,000, sigma_i=60%, r=0, q=0, mu=0",
+  "summary": {
+    "plateau": {
+      "merton": 0.9986962339393916,
+      "heston": 0.9922962232713365
+    },
+    "models": {
+      "gbm": "GBM(sigma=0.6)",
+      "merton": "Merton(sigma=0.4847679857416329, lam=5.0, jump_mean=-0.05, jump_std=0.15)",
+      "heston": "Heston(v0=0.36, kappa=3.0, theta=0.36, xi=1.5, rho=-0.3)"
+    },
+    "show_steps": 720,
+    "show_interval": "1h"
+  },
+  "checks": [
+    {
+      "name": "GBM: std ~ N^-1/2",
+      "ok": true,
+      "detail": "fitted slope -0.495 for N >= 30"
+    },
+    {
+      "name": "GBM: std vs Derman-Kamal (N >= 30)",
+      "ok": true,
+      "detail": "sim/theory within 2.7%"
+    },
+    {
+      "name": "Merton jumps: risk plateaus as hedging gets finer",
+      "ok": true,
+      "detail": "std falls only to 100% from N=720 to N=2880 (GBM: 50%, theory 50%)"
+    },
+    {
+      "name": "Heston stochastic vol: risk plateaus as hedging gets finer",
+      "ok": true,
+      "detail": "std falls only to 99% from N=720 to N=2880 (GBM: 50%, theory 50%)"
+    },
+    {
+      "name": "Merton jumps: fatter left tail than GBM at 1h hedging",
+      "ok": true,
+      "detail": "1% expected shortfall -10,043 vs GBM -443; excess kurtosis 21.0 vs 1.7"
+    },
+    {
+      "name": "Heston stochastic vol: fatter left tail than GBM at 1h hedging",
+      "ok": true,
+      "detail": "1% expected shortfall -2,928 vs GBM -443; excess kurtosis 2.0 vs 1.7"
+    }
+  ],
+  "seconds": 17.46,
+  "config": {
+    "market": {
+      "spot": 60000.0,
+      "r": 0.0,
+      "q": 0.0,
+      "mu": 0.0
+    },
+    "option": {
+      "kind": "call",
+      "strike": null,
+      "expiry_days": 30.0,
+      "position": -1.0
+    },
+    "vol": {
+      "implied": 0.6,
+      "realised": 0.6,
+      "hedge_with": "implied"
+    },
+    "costs": {
+      "bps": 0.0,
+      "fixed": 0.0
+    },
+    "simulation": {
+      "paths": 20000,
+      "seed": 42,
+      "days_per_year": 365.0,
+      "max_chunk_elements": 4000000
+    },
+    "frequency": {
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60,
+        120,
+        240,
+        480,
+        720,
+        1440,
+        2880,
+        8640
+      ],
+      "paths": null
+    },
+    "volgap": {
+      "sigma_r": [
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8
+      ],
+      "steps": 720,
+      "paths": 10000,
+      "show": [
+        0.45,
+        0.75
+      ]
+    },
+    "costs_tradeoff": {
+      "bps": 5.0,
+      "fixed": 0.0,
+      "risk_aversion": 1.0,
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60,
+        120,
+        240,
+        480,
+        960,
+        1440,
+        2880
+      ],
+      "bands": [
+        0.0025,
+        0.005,
+        0.01,
+        0.02,
+        0.03,
+        0.05,
+        0.075,
+        0.1,
+        0.15,
+        0.2,
+        0.3
+      ],
+      "band_modes": [
+        "target",
+        "edge"
+      ],
+      "monitor_steps": 2880,
+      "paths": 10000
+    },
+    "path": {
+      "seed": 3,
+      "steps": 720,
+      "every": 1
+    },
+    "models": {
+      "steps": [
+        8,
+        30,
+        120,
+        720,
+        2880
+      ],
+      "show_steps": 720,
+      "paths": 10000,
+      "merton": {
+        "lam": 5.0,
+        "jump_mean": -0.05,
+        "jump_std": 0.15
+      },
+      "heston": {
+        "kappa": 3.0,
+        "xi": 1.5,
+        "rho": -0.3,
+        "v0": null,
+        "theta": null
+      }
+    },
+    "output_dir": "output"
+  }
+}

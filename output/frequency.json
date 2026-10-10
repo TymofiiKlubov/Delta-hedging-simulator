@@ -1,0 +1,183 @@
+{
+  "experiment": "frequency",
+  "setup": "short 1 x 30-day call K=60,000 on S0=60,000, sigma_i=60%, r=0, q=0, mu=0",
+  "summary": {
+    "premium": 4112.364430952122,
+    "reference_formula": "Derman-Kamal",
+    "slope_log_std_vs_log_n": -0.49483815863777875,
+    "std_ratio_dk": {
+      "1": 0.8565027527080024,
+      "2": 0.8865304889974773,
+      "4": 0.913119143628061,
+      "8": 0.9259939946400165,
+      "15": 0.9507479133151896,
+      "30": 0.9655950445042577,
+      "60": 0.9653229042109974,
+      "120": 0.9763575006532195,
+      "240": 0.9811633065626276,
+      "480": 0.9856171403654379,
+      "720": 0.9832558911992889,
+      "1440": 0.9924217591766816,
+      "2880": 0.9963533208066445,
+      "8640": 0.9862064568757767
+    }
+  },
+  "checks": [
+    {
+      "name": "mean P&L vs theory",
+      "ok": true,
+      "detail": "|z| < 3.38 at every N (Bonferroni, 1% family-wise for 14 means); largest |z| = 3.09 at N=1440"
+    },
+    {
+      "name": "std vs Derman-Kamal (N >= 30)",
+      "ok": true,
+      "detail": "sim/theory within 3.5% (worst at N=60)"
+    },
+    {
+      "name": "std vs Derman-Kamal (N < 30)",
+      "ok": false,
+      "detail": "sim/theory = 0.86 at N=1, 0.89 at N=2, 0.91 at N=4, 0.93 at N=8 - the formula is leading order in 1/N and overstates the std when the option is hedged only a few times"
+    },
+    {
+      "name": "std ~ N^-1/2",
+      "ok": true,
+      "detail": "fitted slope -0.495 for N >= 30"
+    }
+  ],
+  "seconds": 34.95,
+  "config": {
+    "market": {
+      "spot": 60000.0,
+      "r": 0.0,
+      "q": 0.0,
+      "mu": 0.0
+    },
+    "option": {
+      "kind": "call",
+      "strike": null,
+      "expiry_days": 30.0,
+      "position": -1.0
+    },
+    "vol": {
+      "implied": 0.6,
+      "realised": 0.6,
+      "hedge_with": "implied"
+    },
+    "costs": {
+      "bps": 0.0,
+      "fixed": 0.0
+    },
+    "simulation": {
+      "paths": 20000,
+      "seed": 42,
+      "days_per_year": 365.0,
+      "max_chunk_elements": 4000000
+    },
+    "frequency": {
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60,
+        120,
+        240,
+        480,
+        720,
+        1440,
+        2880,
+        8640
+      ],
+      "paths": null
+    },
+    "volgap": {
+      "sigma_r": [
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8
+      ],
+      "steps": 720,
+      "paths": 10000,
+      "show": [
+        0.45,
+        0.75
+      ]
+    },
+    "costs_tradeoff": {
+      "bps": 5.0,
+      "fixed": 0.0,
+      "risk_aversion": 1.0,
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60,
+        120,
+        240,
+        480,
+        960,
+        1440,
+        2880
+      ],
+      "bands": [
+        0.0025,
+        0.005,
+        0.01,
+        0.02,
+        0.03,
+        0.05,
+        0.075,
+        0.1,
+        0.15,
+        0.2,
+        0.3
+      ],
+      "band_modes": [
+        "target",
+        "edge"
+      ],
+      "monitor_steps": 2880,
+      "paths": 10000
+    },
+    "path": {
+      "seed": 3,
+      "steps": 720,
+      "every": 1
+    },
+    "models": {
+      "steps": [
+        8,
+        30,
+        120,
+        720,
+        2880
+      ],
+      "show_steps": 720,
+      "paths": 10000,
+      "merton": {
+        "lam": 5.0,
+        "jump_mean": -0.05,
+        "jump_std": 0.15
+      },
+      "heston": {
+        "kappa": 3.0,
+        "xi": 1.5,
+        "rho": -0.3,
+        "v0": null,
+        "theta": null
+      }
+    },
+    "output_dir": "output"
+  }
+}

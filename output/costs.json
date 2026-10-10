@@ -1,0 +1,214 @@
+{
+  "experiment": "costs",
+  "setup": "short 1 x 30-day call K=60,000 on S0=60,000, sigma_i=60%, r=0, q=0, mu=0",
+  "summary": {
+    "best_fixed": {
+      "strategy": "fixed",
+      "rebalances": 120,
+      "band": null,
+      "label": "every 6h",
+      "mean": -135.40311562539824,
+      "se_mean": 3.2984251625723853,
+      "std": 329.8425162572385,
+      "se_std": 3.2775323363884534,
+      "cost": 135.60066989286742,
+      "trades": 120.6247,
+      "objective": 161.85896295061144,
+      "se_objective": 3.3400655432869275,
+      "theory_cost": 135.4087867993946,
+      "theory_std": 334.78451822985755,
+      "theory_objective": 162.66334449443042
+    },
+    "theory_optimum": {
+      "rebalances": 76,
+      "interval": "9.47h",
+      "objective": 156.56931238648983
+    },
+    "best_band": {
+      "strategy": "edge",
+      "rebalances": 2880,
+      "band": 0.05,
+      "label": "band 0.05 (edge)",
+      "mean": -91.91177086401497,
+      "se_mean": 3.758839232740188,
+      "std": 375.8839232740188,
+      "se_std": 3.267531666228522,
+      "cost": 92.12350445978285,
+      "trades": 350.6277,
+      "objective": 126.26882412331386,
+      "se_objective": 3.8060046785786934,
+      "theory_cost": null,
+      "theory_std": null,
+      "theory_objective": null
+    },
+    "band_improvement": 0.21988364548064798,
+    "premium": 4112.364430952122,
+    "bps": 5.0,
+    "fixed": 0.0,
+    "risk_aversion": 1.0,
+    "monitor_interval": "15min"
+  },
+  "checks": [
+    {
+      "name": "expected cost vs Leland-style theory",
+      "ok": true,
+      "detail": "sim/theory within 2.4% at every N (worst at N=4)"
+    },
+    {
+      "name": "std vs leading-order theory (N >= 30)",
+      "ok": true,
+      "detail": "sim/theory within 2.2% (worst at N=30)"
+    },
+    {
+      "name": "optimal frequency: simulation vs theory",
+      "ok": true,
+      "detail": "simulated optimum N=120 (every 6h), theory N*=76 (every 9.47h); grid neighbours [60, 240]"
+    },
+    {
+      "name": "minimum objective: simulation vs theory",
+      "ok": true,
+      "detail": "J_sim = 161.9 vs J_theory = 156.6 (3.4%)"
+    },
+    {
+      "name": "band hedging beats the best fixed schedule",
+      "ok": true,
+      "detail": "best band band 0.05 (edge): J = 126.3 vs 161.9 for every 6h (22% lower)"
+    }
+  ],
+  "seconds": 48.63,
+  "config": {
+    "market": {
+      "spot": 60000.0,
+      "r": 0.0,
+      "q": 0.0,
+      "mu": 0.0
+    },
+    "option": {
+      "kind": "call",
+      "strike": null,
+      "expiry_days": 30.0,
+      "position": -1.0
+    },
+    "vol": {
+      "implied": 0.6,
+      "realised": 0.6,
+      "hedge_with": "implied"
+    },
+    "costs": {
+      "bps": 0.0,
+      "fixed": 0.0
+    },
+    "simulation": {
+      "paths": 20000,
+      "seed": 42,
+      "days_per_year": 365.0,
+      "max_chunk_elements": 4000000
+    },
+    "frequency": {
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60,
+        120,
+        240,
+        480,
+        720,
+        1440,
+        2880,
+        8640
+      ],
+      "paths": null
+    },
+    "volgap": {
+      "sigma_r": [
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+        0.75,
+        0.8
+      ],
+      "steps": 720,
+      "paths": 10000,
+      "show": [
+        0.45,
+        0.75
+      ]
+    },
+    "costs_tradeoff": {
+      "bps": 5.0,
+      "fixed": 0.0,
+      "risk_aversion": 1.0,
+      "steps": [
+        1,
+        2,
+        4,
+        8,
+        15,
+        30,
+        60,
+        120,
+        240,
+        480,
+        960,
+        1440,
+        2880
+      ],
+      "bands": [
+        0.0025,
+        0.005,
+        0.01,
+        0.02,
+        0.03,
+        0.05,
+        0.075,
+        0.1,
+        0.15,
+        0.2,
+        0.3
+      ],
+      "band_modes": [
+        "target",
+        "edge"
+      ],
+      "monitor_steps": 2880,
+      "paths": 10000
+    },
+    "path": {
+      "seed": 3,
+      "steps": 720,
+      "every": 1
+    },
+    "models": {
+      "steps": [
+        8,
+        30,
+        120,
+        720,
+        2880
+      ],
+      "show_steps": 720,
+      "paths": 10000,
+      "merton": {
+        "lam": 5.0,
+        "jump_mean": -0.05,
+        "jump_std": 0.15
+      },
+      "heston": {
+        "kappa": 3.0,
+        "xi": 1.5,
+        "rho": -0.3,
+        "v0": null,
+        "theta": null
+      }
+    },
+    "output_dir": "output"
+  }
+}
