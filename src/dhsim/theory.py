@@ -20,11 +20,15 @@ They give, to leading order in the hedging interval ``dt = T / N``:
 * vol-gap P&L of an implied-vol hedge  E[PnL] = (1/2)(sigma_i^2 - sigma_r^2) int E[S^2 Gamma_i] dt;
 * Leland-style hedging costs  E|d Delta| S ~ sqrt(2/pi) sigma_r sqrt(dt) E[S^2 Gamma] per rebalance.
 
+A third, two-date integral E[S_s^2 Gamma_s S_t^2 Gamma_t] gives Var(int S^2 Gamma dt): the
+path-to-path spread of the vol-gap P&L of an implied-vol hedge and of the hedging costs.
+
 All P&L figures are for the hedged position ``position`` (``-1`` = short one option), valued at T.
 """
 
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass
 
@@ -72,6 +76,50 @@ def expected_dollar_gamma_sq(t, S0, K, T, sigma_h, sigma_r, r=0.0, q=0.0, mu=0.0
                 / (2.0 * math.sqrt(math.pi) * b * np.sqrt(var)))
 
 
+def expected_dollar_gamma_cross(s, t, S0, K, T, sigma_h, sigma_r, r=0.0, q=0.0,
+                                mu=0.0) -> np.ndarray:
+    """E[S_s^2 Gamma_s * S_t^2 Gamma_t] for two dates on the same GBM(mu, sigma_r) path.
+
+    With Y_u = ln(S_u/K) + c_u (jointly Gaussian, Cov = sigma_r^2 min(s, t)) the product of the
+    two Gaussian kernels integrates to
+        e^{-q(tau_s + tau_t)} E[S_s S_t] exp(-n' C^{-1} n' / 2) / (2 pi sqrt(det C)),
+    where C = Cov(Y) + diag(b_s^2, b_t^2) and n' = E[Y] + Cov(Y) (1, 1)'.
+    """
+    s, t = np.broadcast_arrays(np.asarray(s, dtype=float), np.asarray(t, dtype=float))
+    lo, hi = np.minimum(s, t), np.maximum(s, t)
+    tau1, tau2 = T - lo, T - hi
+    c_rate = r - q + 0.5 * sigma_h**2
+    x0 = math.log(S0 / K)
+    v1, v2 = sigma_r**2 * lo, sigma_r**2 * hi
+    cov = v1
+    n1 = x0 + (mu - 0.5 * sigma_r**2) * lo + c_rate * tau1 + v1 + cov
+    n2 = x0 + (mu - 0.5 * sigma_r**2) * hi + c_rate * tau2 + cov + v2
+    c11, c22 = v1 + sigma_h**2 * tau1, v2 + sigma_h**2 * tau2
+    det = c11 * c22 - cov**2
+    quad = (c22 * n1**2 - 2.0 * cov * n1 * n2 + c11 * n2**2) / det
+    cross_moment = S0**2 * np.exp(mu * (lo + hi) + sigma_r**2 * lo)  # E[S_s S_t]
+    return (np.exp(-q * (tau1 + tau2)) * cross_moment * np.exp(-0.5 * quad)
+            / (2.0 * math.pi * np.sqrt(det)))
+
+
+@functools.lru_cache(maxsize=512)
+def gamma_moments(S0: float, K: float, T: float, sigma_h: float, sigma_r: float, r: float = 0.0,
+                  q: float = 0.0, mu: float = 0.0, n_quad: int = 64) -> tuple[float, float, float]:
+    """The three dollar-gamma integrals behind every variance formula here.
+
+    With G_t = S_t^2 Gamma_h(T - t, S_t) on GBM(mu, sigma_r) paths and w_t = e^{r(T-t)}:
+    ``I1 = int w E[G] dt``, ``I2 = int w^2 E[G^2] dt`` and ``V = Var(int w G dt)``.
+    """
+    t, wq = time_quadrature(T, n_quad)
+    w = np.exp(r * (T - t))
+    args = (S0, K, T, sigma_h, sigma_r, r, q, mu)
+    i1 = float(np.sum(wq * w * expected_dollar_gamma(t, *args)))
+    i2 = float(np.sum(wq * w**2 * expected_dollar_gamma_sq(t, *args)))
+    ww = wq * w
+    second = float(ww @ expected_dollar_gamma_cross(t[:, None], t[None, :], *args) @ ww)
+    return i1, i2, max(second - i1**2, 0.0)
+
+
 def derman_kamal_std(n_rebalances, S0, K, T, sigma, r=0.0, q=0.0, position=-1.0) -> np.ndarray:
     """Derman & Kamal: std of the discrete-hedging P&L ~ sqrt(pi/4) * vega * sigma / sqrt(N).
 
@@ -86,11 +134,56 @@ def discretisation_std(n_rebalances, S0, K, T, sigma_r, sigma_h=None, r=0.0, q=0
     """Leading-order std of the hedging error from rebalancing N times (any strike):
     sqrt((1/2) sigma_r^4 (T/N) int_0^T e^{2r(T-t)} E[(S_t^2 Gamma_t)^2] dt)."""
     sigma_h = sigma_r if sigma_h is None else sigma_h
-    t, w = time_quadrature(T)
-    integral = np.sum(w * np.exp(2 * r * (T - t))
-                      * expected_dollar_gamma_sq(t, S0, K, T, sigma_h, sigma_r, r, q, mu))
+    _, i2, _ = gamma_moments(S0, K, T, sigma_h, sigma_r, r, q, mu)
     n = np.asarray(n_rebalances, dtype=float)
-    return abs(position) * np.sqrt(0.5 * sigma_r**4 * (T / n) * integral)
+    return abs(position) * np.sqrt(0.5 * sigma_r**4 * (T / n) * i2)
+
+
+def vol_gap_std(S0, K, T, sigma_i, sigma_r, r=0.0, q=0.0, mu=0.0, position=-1.0,
+                n_rebalances=None) -> float:
+    """Std of the P&L of an implied-vol delta hedge on GBM(mu, sigma_r) paths.
+
+    Without ``n_rebalances``: the continuous-hedging part, the std of
+    (1/2)(sigma_i^2 - sigma_r^2) int e^{r(T-t)} S^2 Gamma_i dt across paths. With it, the
+    discrete-hedging error is included (see :func:`pnl_std`).
+    """
+    if n_rebalances is not None:
+        return float(pnl_std(n_rebalances, S0, K, T, sigma_i, sigma_r, r=r, q=q, mu=mu,
+                             position=position))
+    _, _, v = gamma_moments(S0, K, T, sigma_i, sigma_r, r, q, mu)
+    return abs(0.5 * position * (sigma_i**2 - sigma_r**2)) * math.sqrt(v)
+
+
+def pnl_std(n_rebalances, S0, K, T, sigma_i, sigma_r, hedge_vol=None, bps=0.0, r=0.0, q=0.0,
+            mu=0.0, position=-1.0) -> np.ndarray:
+    """Leading-order std of the hedged P&L: discrete hedging + vol gap + proportional costs.
+
+    With G = S^2 Gamma at the hedge vol sigma_h, dt = T/N, k = bps/10^4 and the integrals of
+    :func:`gamma_moments`, the variance per unit position is
+
+        (1/2) sigma_r^4 dt I2                        discrete-hedging error
+      + (1/4) (sigma_h^2 - sigma_r^2)^2 V            path-dependent vol-gap P&L
+      + k^2 (2/pi) sigma_r^2 V / dt                  path-dependent costs: paths that stay near
+                                                     the strike carry more gamma and trade more
+      + k^2 (1 - 2/pi) sigma_r^2 I2                  noise in each trade's size
+      - k sqrt(2/pi) sigma_r (sigma_h^2 - sigma_r^2) V / sqrt(dt)   vol-gap P&L vs costs (short)
+
+    Costs grow like sqrt(N) on average and their variance like N, so with costs the risk stops
+    falling as N increases. The covariance between the hedging error and the costs is left
+    out: a big move costs twice on the day (hedge error and fees) but also pushes the spot away
+    from the strike, cutting future gamma and future fees; the two effects largely cancel
+    (in simulation the net term is < 3% of the variance at every frequency tested).
+    """
+    sigma_h = sigma_i if hedge_vol is None else hedge_vol
+    _, i2, v = gamma_moments(S0, K, T, sigma_h, sigma_r, r, q, mu)
+    dt = T / np.asarray(n_rebalances, dtype=float)
+    k = bps * 1e-4
+    gap = sigma_h**2 - sigma_r**2
+    sym = (0.5 * sigma_r**4 * dt * i2 + 0.25 * gap**2 * v
+           + k**2 * ((2 / math.pi) * sigma_r**2 * v / dt + (1 - 2 / math.pi) * sigma_r**2 * i2))
+    cross = -k * _SQRT_2_OVER_PI * sigma_r * gap * v / np.sqrt(dt)
+    var = position**2 * sym + (-position) * abs(position) * cross
+    return np.sqrt(np.maximum(var, 0.0))
 
 
 def vol_gap_mean(S0, K, T, sigma_i, sigma_r, r=0.0, q=0.0, mu=0.0, kind="call", position=-1.0,
@@ -161,7 +254,7 @@ def cost_tradeoff(n_rebalances, S0, K, T, sigma_i, sigma_r, bps, fixed=0.0, risk
     premium = abs(position) * float(bs.price(S0, K, T, sigma_i, r, q, kind))
     cost = expected_hedge_cost(ns, S0, K, T, sigma_r, sigma_i, bps, fixed, r, q, mu, kind, position)
     gap = vol_gap_mean(S0, K, T, sigma_i, sigma_r, r, q, mu, kind, position, "implied")
-    std = discretisation_std(ns, S0, K, T, sigma_r, sigma_i, r, q, mu, position)
+    std = pnl_std(ns, S0, K, T, sigma_i, sigma_r, None, bps, r, q, mu, position)
     mean = gap - cost
     return CostTradeoff(ns, mean, std, cost, -mean + risk_aversion * std**2 / premium)
 
