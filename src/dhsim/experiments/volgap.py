@@ -25,7 +25,7 @@ from ..hedging import Strategy, run_hedge
 from ..paths import GBM
 from ..stats import summarize
 from .common import (Checks, ExperimentResult, Setup, Timer, print_table, simulate_chunks,
-                     write_outputs)
+                     write_outputs, z_threshold)
 
 
 def run(cfg: Config, out_dir=None, verbose: bool = True) -> ExperimentResult:
@@ -103,10 +103,12 @@ def _check(setup: Setup, rows: list[dict]) -> Checks:
     checks = Checks()
     for key, theory, label in (("implied", "theory_mean_implied", "implied-vol delta"),
                                ("realised", "theory_lockin", "realised-vol delta")):
-        bad = [r for r in rows if abs(r[f"mean_{key}"] - r[theory]) > 3 * r[f"se_{key}"]]
+        z = z_threshold(len(rows))
+        worst = max(abs(r[f"mean_{key}"] - r[theory]) / r[f"se_{key}"] for r in rows)
+        bad = [r for r in rows if abs(r[f"mean_{key}"] - r[theory]) > z * r[f"se_{key}"]]
         checks.add(f"mean P&L vs theory ({label})", not bad,
-                   "within 3 SE for every sigma_r" if not bad else
-                   "outside 3 SE at sigma_r = " + ", ".join(
+                   f"|z| < {z:.2f} for every sigma_r (largest {worst:.2f})" if not bad else
+                   f"|z| > {z:.2f} at sigma_r = " + ", ".join(
                        f"{r['sigma_r']:.2f} ({r[f'mean_{key}']:+.1f} vs {r[theory]:+.1f})" for r in bad))
     for key, label in (("realised", "realised-vol delta"), ("implied", "implied-vol delta")):
         ratio = [r[f"std_{key}"] / r[f"theory_std_{key}"] for r in rows]

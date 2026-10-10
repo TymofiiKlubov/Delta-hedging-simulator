@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from scipy.special import ndtri
 
 from .. import bs
 from ..config import Config
@@ -97,6 +98,12 @@ def interval_label(expiry_days: float, n_rebalances: int) -> str:
     else:
         value, unit = minutes, "min"
     return f"{value:.3g}{unit}"
+
+
+def z_threshold(n_comparisons: int, family_alpha: float = 0.01) -> float:
+    """Two-sided z threshold with a Bonferroni correction: testing m means at once, each must
+    stay within this many standard errors for a family-wise false-flag rate of ``family_alpha``."""
+    return float(ndtri(1.0 - family_alpha / (2 * max(1, n_comparisons))))
 
 
 def common_grid(steps: Sequence[int], cap: int = 100_000) -> int:

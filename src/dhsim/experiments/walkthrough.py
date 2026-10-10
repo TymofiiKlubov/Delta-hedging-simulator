@@ -106,7 +106,7 @@ def _plot(setup: Setup, st: dict, days: np.ndarray, summary: dict, every: int):
         ax1, ax2, ax3, ax4 = axes
 
         ax1.axhline(setup.K, color=plt_.MUTED, lw=1.0)
-        plt_.end_label(ax1, days[-1], setup.K, f"strike {plt_.compact(setup.K)}", dx=4)
+        plt_.end_label(ax1, days[-1], setup.K, f"strike {plt_.compact(setup.K)}", dx=4, dy=7)
         ax1.plot(days, S, color=plt_.INK, lw=1.4)
         plt_.money_axis(ax1)
         ax1.set_ylabel("spot")
@@ -124,7 +124,7 @@ def _plot(setup: Setup, st: dict, days: np.ndarray, summary: dict, every: int):
         vol = _rolling_vol(S, st["t"], window)[window - 1:]  # from the first full window
         vdays = days[window:]
         ax3.axhline(setup.sigma_i, color=plt_.INK, lw=1.2)
-        plt_.end_label(ax3, days[-1], setup.sigma_i, "implied", dx=4)
+        plt_.end_label(ax3, days[-1], setup.sigma_i, "implied", dx=4, dy=7)
         ax3.plot(vdays, vol, color=blue, lw=1.2)
         ax3.fill_between(vdays, setup.sigma_i, vol, where=vol > setup.sigma_i, color=orange,
                          alpha=0.18, lw=0, label="realised above implied: the short bleeds")

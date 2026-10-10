@@ -174,8 +174,8 @@ def _plot(setup: Setup, rows: list[dict], optimum, steps, kappa, premium, monito
         # (a) the U-shaped objective and its two components
         ax1.plot(grid, curve.cost, color=plt_.INK_2, lw=1.0)
         ax1.plot(grid, risk, color=plt_.MUTED, lw=1.0)
-        # label the components where they are well apart: ~20% and ~50% along the N range
-        i, j = int(0.2 * (len(grid) - 1)), int(0.5 * (len(grid) - 1))
+        # label the components where they are well apart: ~10% and ~50% along the N range
+        i, j = int(0.1 * (len(grid) - 1)), int(0.5 * (len(grid) - 1))
         plt_.end_label(ax1, grid[i], curve.cost[i], "expected cost", dx=0, dy=9)
         plt_.end_label(ax1, grid[j], risk[j], "risk penalty \u03ba\u00b7Var / premium", dx=4, dy=-11)
         ax1.plot(grid, curve.objective, color=plt_.INK, lw=1.5,

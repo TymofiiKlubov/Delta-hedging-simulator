@@ -18,7 +18,7 @@ from ..hedging import Strategy, run_hedge
 from ..paths import GBM
 from ..stats import summarize
 from .common import (Checks, ExperimentResult, Setup, Timer, common_grid, print_table,
-                     simulate_chunks, write_outputs)
+                     simulate_chunks, write_outputs, z_threshold)
 
 KEY_INTERVALS = {1: "monthly", 4: "~weekly", 30: "daily", 720: "hourly"}
 
@@ -86,12 +86,15 @@ def _check(setup: Setup, rows: list[dict]) -> tuple[Checks, dict]:
 
     # Expected P&L: exact in expectation (frictionless, mu = r - q) for any N.
     slack = lambda r: 0.05 * abs(r["theory_mean"]) if not setup.costs.is_zero else 0.0  # noqa: E731
-    bad = [r for r in rows if abs(r["mean"] - r["theory_mean"]) > 3 * r["se_mean"] + slack(r)]
-    checks.add("mean P&L vs theory",
-               not bad,
-               "within 3 SE at every N" if not bad else
-               "outside 3 SE at N = " + ", ".join(f"{r['rebalances']} ({r['mean']:+.1f} vs "
-                                                   f"{r['theory_mean']:+.1f})" for r in bad))
+    z = z_threshold(len(rows))
+    worst = max(rows, key=lambda r: abs(r["mean"] - r["theory_mean"]) / r["se_mean"])
+    bad = [r for r in rows if abs(r["mean"] - r["theory_mean"]) > z * r["se_mean"] + slack(r)]
+    checks.add("mean P&L vs theory", not bad,
+               (f"|z| < {z:.2f} at every N (Bonferroni, 1% family-wise for {len(rows)} means); "
+                f"largest |z| = {abs(worst['mean'] - worst['theory_mean']) / worst['se_mean']:.2f} "
+                f"at N={worst['rebalances']}") if not bad else
+               f"|z| > {z:.2f} at N = " + ", ".join(f"{r['rebalances']} ({r['mean']:+.1f} vs "
+                                                     f"{r['theory_mean']:+.1f})" for r in bad))
 
     matched = math.isclose(setup.sigma_r, setup.sigma_i) and setup.hedge_vol is None
     summary: dict = {"premium": setup.premium, "reference_formula": ref_name}

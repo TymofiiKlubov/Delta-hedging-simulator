@@ -15,7 +15,8 @@ from cycler import cycler
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
-# Validated categorical order (slots 1-3 pass all-pairs CVD checks; see README "Charts").
+# Categorical order validated for colour-vision deficiency: slots 1-3 stay distinguishable
+# in every pairing, and each chart also separates series by marker shape.
 SERIES = ("#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948")
 MARKERS = ("o", "s", "^", "D", "v", "P", "X", "*")
 SURFACE = "#fcfcfb"
